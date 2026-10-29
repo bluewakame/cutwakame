@@ -1,12 +1,15 @@
-# カットワカメ 0.1.0
+# カットワカメ 0.2.0
 
-AIから操作できるWindows用の小さな動画編集ソフトです。`CutWakame.exe` は単体で起動でき、FFmpeg/FFprobeを同梱しています。Windows 11で動作確認しました。
+AIからMCPで操作できるWindows向け動画編集ソフトです。`CutWakame.exe` はFFmpeg/FFprobeを同梱した単体実行ファイルです。
 
-## 画面から使う
+## 編集画面
 
-`CutWakame.exe` をダブルクリックします。動画を追加し、クリップを選んでトリム・削除・並べ替えを行い、`Export MP4` で書き出します。現在の画面はクリップ一覧方式で、プレビューや波形表示は未実装です。
+- **直感的な操作**: メディア追加、クリックでクリップを選択、タイムラインで全体を確認、フレームプレビューとスクラブ
+- **細かな編集**: IN/OUTの秒単位指定、再生位置での分割、複製、削除、順序変更
+- **構成を再利用**: 動画クリップとテキストレイヤー、書き出し設定をJSONプロジェクトに保存。MCPから同じ構成を編集可能
+- **書き出し**: 720p、1080p、縦動画のプリセット。H.264/AACのMP4
 
-プロジェクトは既定で `Documents\カットワカメ\Untitled.aicut.json` に保存されます。別のプロジェクトを使う場合:
+起動するには `CutWakame.exe` をダブルクリックします。プロジェクトの既定保存先は `Documents\カットワカメ\Untitled.aicut.json` です。別のプロジェクトを開く場合:
 
 ```powershell
 .\CutWakame.exe --project "C:\path\my-edit.aicut.json"
@@ -14,7 +17,7 @@ AIから操作できるWindows用の小さな動画編集ソフトです。`CutW
 
 ## MCP接続
 
-このアプリ自身がMCP stdioサーバーになります。MCPクライアントの設定で次のコマンドと引数を指定します。画面とMCPで同じプロジェクトパスを指定してください。
+アプリ自身がMCP stdioサーバーになります。画面とMCPで同じプロジェクトパスを指定してください。
 
 ```toml
 [mcp_servers.cutwakame]
@@ -22,16 +25,12 @@ command = "C:\\path\\to\\CutWakame.exe"
 args = ["--mcp", "--project", "C:\\path\\to\\my-edit.aicut.json"]
 ```
 
-提供ツール: `get_project`, `add_clip`, `trim_clip`, `remove_clip`, `move_clip`, `export_video`。クリップIDは `add_clip` または `get_project` の結果から取得します。`move_clip` の `index` は0始まりです。
+ツール: `get_project`, `add_clip`, `trim_clip`, `split_clip`, `duplicate_clip`, `remove_clip`, `move_clip`, `add_title`, `remove_title`, `set_export`, `export_video`。クリップIDは `add_clip` / `get_project` の応答から取得します。`move_clip` の `index` は0始まりです。
 
-操作例: 「動画Aの0〜8秒と動画Bの12〜18秒を追加して、順序を入れ替え、`output.mp4` に書き出して」
+## 制限と開発
 
-## 書き出し仕様
+プレビューは選択した素材をフレーム単位で確認する方式で、音声は再生しません。完成タイムライン全体のリアルタイム合成プレビュー、波形、トランジション、複数映像トラックは未実装です。既存の0.1プロジェクトは読み込み可能です。
 
-MP4/H.264/AAC、1280×720、30 fps。縦横比を維持し余白を付けます。無音の素材にも対応します。元動画は上書きしません。高解像度設定、字幕、複数トラック、トランジション、プレビューは今後の拡張対象です。
-
-## 再ビルド
-
-Python 3.14、PyInstaller 6、FFmpeg/FFprobeが必要です。`build.ps1` を実行すると `CutWakame.exe` を再生成できます。編集可能なソースは `aicut.py` です。
+ソースからの実行には Python 3.14、Pillow、FFmpeg/FFprobeが必要です。`python aicut.py` で起動し、PyInstallerを入れて `build.ps1` を実行すると `.exe` を作れます。
 
 
