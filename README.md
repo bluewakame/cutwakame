@@ -1,4 +1,6 @@
-# カットワカメ 0.2.0
+# カットワカメ 0.2.1
+
+**Mac版を追加しました。起動方法・ビルド方法は [README-Mac.md](README-Mac.md) を参照してください。**
 
 AIからMCPで操作できるWindows向け動画編集ソフトです。`CutWakame.exe` はFFmpeg/FFprobeを同梱した単体実行ファイルです。
 

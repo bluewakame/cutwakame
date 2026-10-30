@@ -11,12 +11,34 @@ import tempfile
 from pathlib import Path
 
 APP = "カットワカメ"
-VERSION = "0.2.0"
+VERSION = "0.2.1-mac"
 
 
 def binary(name):
-    bundled = Path(getattr(sys, "_MEIPASS", Path(__file__).parent)) / "bin" / (name + ".exe")
-    return str(bundled) if bundled.exists() else (shutil.which(name) or name)
+    filename = name + (".exe" if sys.platform == "win32" else "")
+    bundled = Path(getattr(sys, "_MEIPASS", Path(__file__).parent)) / "bin" / filename
+    if bundled.is_file():
+        return str(bundled)
+    found = shutil.which(name)
+    if found:
+        return found
+    # Finder does not inherit a shell's Homebrew PATH.
+    for directory in ("/opt/homebrew/bin", "/usr/local/bin"):
+        candidate = Path(directory) / filename
+        if candidate.is_file():
+            return str(candidate)
+    raise FileNotFoundError(f"{name} が見つかりません。FFmpeg同梱版をご利用ください。")
+
+
+def title_font():
+    fonts = [
+        Path("/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc"),
+        Path("/System/Library/Fonts/Supplemental/Arial Unicode.ttf"),
+        Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts" / "meiryo.ttc",
+        Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts" / "arial.ttf",
+        Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+    ]
+    return next((p for p in fonts if p.is_file()), None)
 
 
 def probe(path):
@@ -192,8 +214,7 @@ class Project:
             active_titles = [t for t in titles if t["start"] < total and t["end"] > 0]
             if active_titles:
                 from PIL import Image, ImageDraw, ImageFont
-                fonts = [Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts" / "meiryo.ttc", Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts" / "arial.ttf", Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf")]
-                font_path = next((p for p in fonts if p.exists()), None)
+                font_path = title_font()
                 for i, title in enumerate(active_titles):
                     image = Image.new("RGBA", (w, h), (0, 0, 0, 0))
                     draw = ImageDraw.Draw(image)
@@ -283,91 +304,6 @@ def serve(project):
 def gui(project):
     from studio_tk import launch
     return launch(project)
-    import tkinter as tk
-    from tkinter import filedialog, messagebox, simpledialog, ttk
-    root = tk.Tk()
-    root.title(f"{APP} — {project.data['name']}")
-    root.geometry("900x550")
-    frame = ttk.Frame(root, padding=12)
-    frame.pack(fill="both", expand=True)
-    ttk.Label(frame, text="Timeline", font=("Segoe UI", 18, "bold")).pack(anchor="w")
-    columns = ("source", "in", "out", "length")
-    tree = ttk.Treeview(frame, columns=columns, show="headings", selectmode="browse")
-    for c, title, width in zip(columns, ("Source", "In", "Out", "Length"), (550, 70, 70, 80)):
-        tree.heading(c, text=title)
-        tree.column(c, width=width)
-    tree.pack(fill="both", expand=True, pady=10)
-    status = tk.StringVar()
-    ttk.Label(frame, textvariable=status).pack(anchor="w")
-
-    def refresh():
-        tree.delete(*tree.get_children())
-        data = project.summary()
-        for c in data["clips"]:
-            tree.insert("", "end", iid=c["id"], values=(Path(c["path"]).name, f"{c['start']:.2f}", f"{c['end']:.2f}", f"{c['end']-c['start']:.2f}"))
-        status.set(f"{len(data['clips'])} clips  •  {data['timeline_duration']:.2f} seconds  •  {project.path}")
-
-    def selected():
-        ids = tree.selection()
-        return ids[0] if ids else None
-
-    def action(fn):
-        try:
-            fn()
-            refresh()
-        except Exception as exc:
-            messagebox.showerror(APP, str(exc))
-
-    bar = ttk.Frame(frame)
-    bar.pack(fill="x")
-
-    def add():
-        files = filedialog.askopenfilenames(filetypes=[("Video files", "*.mp4 *.mov *.mkv *.avi *.webm"), ("All files", "*.*")])
-        for path in files:
-            project.add(path)
-
-    def trim():
-        cid = selected()
-        if not cid: return
-        _, c = project.find(cid)
-        start = simpledialog.askfloat("Trim", "In (seconds)", initialvalue=c["start"], minvalue=0)
-        if start is None: return
-        end = simpledialog.askfloat("Trim", "Out (seconds)", initialvalue=c["end"], minvalue=0)
-        if end is not None: project.trim(cid, start, end)
-
-    def move(delta):
-        cid = selected()
-        if cid:
-            i, _ = project.find(cid)
-            project.move(cid, max(0, min(len(project.data["clips"])-1, i+delta)))
-            refresh()
-            tree.selection_set(cid)
-
-    def export():
-        path = filedialog.asksaveasfilename(defaultextension=".mp4", filetypes=[("MP4 video", "*.mp4")])
-        if not path: return
-        status.set("Rendering video…")
-        def worker():
-            try:
-                result = project.export(path)
-                root.after(0, lambda: (refresh(), messagebox.showinfo(APP, f"Saved: {result['output']}")))
-            except Exception as exc:
-                root.after(0, lambda e=str(exc): (refresh(), messagebox.showerror(APP, e)))
-        threading.Thread(target=worker, daemon=True).start()
-
-    for label, fn in (("Add videos", add), ("Trim", trim), ("Remove", lambda: project.remove(selected()) if selected() else None), ("Move up", lambda: move(-1)), ("Move down", lambda: move(1)), ("Export MP4", export)):
-        ttk.Button(bar, text=label, command=lambda f=fn: action(f) if f != export else f()).pack(side="left", padx=3)
-    refresh()
-    last_mtime = [project.path.stat().st_mtime_ns if project.path.exists() else 0]
-    def poll():
-        mtime = project.path.stat().st_mtime_ns if project.path.exists() else 0
-        if mtime != last_mtime[0]:
-            project.reload()
-            refresh()
-            last_mtime[0] = mtime
-        root.after(1000, poll)
-    root.after(1000, poll)
-    root.mainloop()
 
 
 def main():
